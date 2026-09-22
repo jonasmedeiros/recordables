@@ -1,0 +1,7 @@
+class <%= class_name %> < ApplicationRecord
+  include Bucketable
+<% if attributes.any? -%>
+
+  validates <%= attributes.map { |attribute| ":#{attribute.name}" }.join(", ") %>, presence: true
+<% end -%>
+end

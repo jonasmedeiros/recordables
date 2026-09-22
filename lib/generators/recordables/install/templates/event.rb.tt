@@ -1,0 +1,8 @@
+class Event < ApplicationRecord
+  belongs_to :recording
+  belongs_to :recordable, polymorphic: true
+  belongs_to :actor, class_name: "<%= actor_class %>"
+
+  scope :newest_first, -> { order(created_at: :desc, id: :desc) }
+  scope :of_type, ->(type) { where(recordable_type: type) }
+end

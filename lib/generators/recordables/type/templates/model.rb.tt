@@ -1,0 +1,9 @@
+class <%= class_name %> < ApplicationRecord
+  recordable
+<% if attributes.any? -%>
+
+  validates <%= attributes.map { |attribute| ":#{attribute.name}" }.join(", ") %>, presence: true
+<% end -%>
+
+  def summary = <%= summary_expression %>
+end

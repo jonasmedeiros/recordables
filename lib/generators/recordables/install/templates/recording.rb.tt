@@ -1,0 +1,19 @@
+class Recording < ApplicationRecord
+  records :recordable, types: Recordable::TYPES, inverse_of: :recordings
+
+  enum :status, { active: 0, archived: 1, trashed: 2 }
+
+<% if buckets? -%>
+  belongs_to :bucket
+<% end -%>
+  belongs_to :creator, class_name: "<%= actor_class %>"
+  belongs_to :parent, class_name: "Recording", optional: true
+
+  has_many :children, class_name: "Recording", foreign_key: :parent_id, dependent: :destroy
+  has_many :events, dependent: :destroy
+
+  delegate :commentable?, :publishable?, :nestable?, :summary, to: :recordable
+
+  scope :newest_first, -> { order(created_at: :desc, id: :desc) }
+  scope :sorted, -> { order(:position, :id) }
+end
