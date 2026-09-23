@@ -53,9 +53,36 @@ ActiveRecord::Schema.define do
     t.datetime :created_at, null: false
   end
 
+  create_table :topics, force: true do |t|
+    t.string :title, null: false
+    t.datetime :created_at, null: false
+  end
+
+  create_table :boards, force: true do |t|
+    t.string :title, null: false
+    t.datetime :created_at, null: false
+  end
+
+  create_table :playlists, force: true do |t|
+    t.string :title, null: false
+    t.datetime :created_at, null: false
+  end
+
+  create_table :tracks, force: true do |t|
+    t.string :title, null: false
+    t.datetime :created_at, null: false
+  end
+
   create_table :tags, force: true do |t|
     t.references :draft
+    t.references :topic
     t.string :name
+  end
+
+  create_table :cards, force: true do |t|
+    t.references :board
+    t.string :name
+    t.datetime :updated_at
   end
 
   create_table :active_storage_blobs, force: true do |t|
