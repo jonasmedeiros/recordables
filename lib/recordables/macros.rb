@@ -81,12 +81,17 @@ module Recordables
     #   class RoutineTemplate < ApplicationRecord
     #     recordable
     #     has_children :task_templates, class_name: "TaskTemplate"
-    #     nested_recordable_attributes_for :task_templates, class_name: "TaskTemplate"
+    #     nested_recordable_attributes_for :task_templates, class_name: "TaskTemplate",
+    #       recording_attributes: ->(template) { { account: template.account } }
     #   end
-    def nested_recordable_attributes_for(plural_name, class_name: nil)
+    #
+    # recording_attributes: only needed if the host app's Recording has its
+    # own required columns (an account_id or similar tenant column is the
+    # common case) — see Recordables::NestedRecordableAttributes.
+    def nested_recordable_attributes_for(plural_name, class_name: nil, recording_attributes: nil)
       include Recordables::NestedRecordableAttributes
       target_class_name = class_name&.to_s || plural_name.to_s.classify
-      __recordables_define_nested_attributes(plural_name, class_name: target_class_name)
+      __recordables_define_nested_attributes(plural_name, class_name: target_class_name, recording_attributes: recording_attributes)
     end
 
     # A belongs_to whose target is trashable, resolved through the append-only

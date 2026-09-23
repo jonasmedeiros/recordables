@@ -19,6 +19,16 @@ class NestedRecordableAttributesTest < RecordablesTest
     assert_equal ["Song One"], playlist.tracks.map(&:title)
   end
 
+  def test_apply_passes_recording_attributes_through_to_the_new_childs_recording
+    playlist = Recording.record(Playlist.new(title: "Roadtrip"), actor: actor).recordable
+    playlist.tracks_attributes = [{ "title" => "Song One" }]
+
+    playlist.apply_tracks_attributes!(actor: actor)
+
+    track_recording = Recording.where(recordable_type: "Track").where(parent_id: playlist.recording.id).first
+    assert_equal 100, track_recording.position
+  end
+
   def test_apply_revises_an_existing_child_whose_id_is_present
     playlist = Recording.record(Playlist.new(title: "Roadtrip"), actor: actor).recordable
     playlist.add_track(actor: actor, title: "Original")

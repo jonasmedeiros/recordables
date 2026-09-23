@@ -7,8 +7,16 @@ module Recordables
   #   class RoutineTemplate < ApplicationRecord
   #     recordable
   #     has_children :task_templates, class_name: "TaskTemplate"
-  #     nested_recordable_attributes_for :task_templates, class_name: "TaskTemplate"
+  #     nested_recordable_attributes_for :task_templates, class_name: "TaskTemplate",
+  #       recording_attributes: ->(template) { { account: template.account } }
   #   end
+  #
+  # recording_attributes: is only needed if the host app's Recording has its
+  # own required columns beyond what the gem's own template generates (an
+  # account_id or similar tenant column is the common case) — a new child's
+  # Recording needs those set too, and there's no attribute on the
+  # submitted form row itself to read them from. Called once per new child,
+  # with the parent record, right before creating it.
   #
   # accepts_nested_attributes_for can't work here: it writes at
   # assign_attributes time, straight to a real association's rows — but
@@ -30,7 +38,7 @@ module Recordables
     extend ActiveSupport::Concern
 
     class_methods do
-      def __recordables_define_nested_attributes(plural_name, class_name:)
+      def __recordables_define_nested_attributes(plural_name, class_name:, recording_attributes:)
         singular_name = plural_name.to_s.singularize
         target_class_name = class_name.to_s
         pending_ivar = :"@pending_#{plural_name}_attributes"
@@ -88,7 +96,8 @@ module Recordables
                 child.recording.revise(actor: actor, **changes)
               end
             elsif !destroy && changes.present?
-              public_send(:"add_#{singular_name}", actor: actor, **changes)
+              extra_recording_attrs = recording_attributes ? recording_attributes.call(self) : {}
+              public_send(:"add_#{singular_name}", actor: actor, recording: extra_recording_attrs, **changes)
             end
           end
 
