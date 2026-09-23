@@ -3,6 +3,7 @@ require "rails/generators/test_case"
 require "generators/recordables/install/install_generator"
 require "generators/recordables/type/type_generator"
 require "generators/recordables/bucket/bucket_generator"
+require "generators/recordables/backfill/backfill_generator"
 
 class InstallGeneratorTest < Rails::Generators::TestCase
   tests Recordables::Generators::InstallGenerator
@@ -126,5 +127,55 @@ class BucketGeneratorTest < Rails::Generators::TestCase
 
     assert_match(/Invalid name/, output)
     assert_file "app/models/concerns/bucketable.rb", /TYPES = %w\[\]/
+  end
+end
+
+class BackfillGeneratorTest < Rails::Generators::TestCase
+  tests Recordables::Generators::BackfillGenerator
+  destination File.expand_path("../tmp/generated", __dir__)
+  setup :prepare_destination
+
+  def test_it_scaffolds_a_migration_using_with_trashed
+    run_generator %w[RoutineTemplate]
+
+    assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
+      assert_match(/RoutineTemplate\.with_trashed\.find_each/, migration)
+      refute_match(/RoutineTemplate\.find_each/, migration)
+      assert_match(/Recording\.record\(/, migration)
+    end
+  end
+
+  def test_creator_and_account_options_are_used_verbatim
+    run_generator %w[RoutineTemplate --creator=person_id --account=account_id]
+
+    assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
+      assert_match(/actor: routine_template\.person_id/, migration)
+      assert_match(/account: routine_template\.account_id/, migration)
+    end
+  end
+
+  def test_defaults_to_actor_and_account_when_options_are_omitted
+    run_generator %w[RoutineTemplate]
+
+    assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
+      assert_match(/actor: routine_template\.actor/, migration)
+      assert_match(/account: routine_template\.account/, migration)
+    end
+  end
+
+  def test_the_down_migration_cleans_up_the_recordings_it_created
+    run_generator %w[RoutineTemplate]
+
+    assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
+      assert_match(/def down/, migration)
+      assert_match(/Recording\.where\(recordable_type: "RoutineTemplate"\)\.with_trashed\.find_each/, migration)
+    end
+  end
+
+  def test_it_refuses_an_invalid_class_name
+    output = capture(:stderr) { run_generator ["bad name"] }
+
+    assert_match(/Invalid name/, output)
+    assert_no_migration "db/migrate/backfill_bad names_recordings.rb"
   end
 end

@@ -51,4 +51,10 @@ class RecordableTest < RecordablesTest
 
     assert_equal "Second", recording.revise(actor: actor, title: "Second").title
   end
+
+  def test_recording_returns_the_recording_currently_pointing_at_this_row
+    recording = Recording.record(Post.new(title: "First"), actor: actor)
+
+    assert_equal recording, recording.recordable.recording
+  end
 end

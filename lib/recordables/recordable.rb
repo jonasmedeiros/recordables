@@ -17,6 +17,14 @@ module Recordables
     def publishable? = false
     def nestable? = false
 
+    # The one Recording currently pointing at this snapshot. A row can end
+    # up with more than one recordings row over its lifetime only in the
+    # sense that revise()/revert_to repoint a Recording between many rows
+    # — but at any moment, exactly one Recording points at this specific
+    # row (or, once it's been superseded, none). .last is a reasonable
+    # proxy for "the current one" without a dedicated column to query.
+    def recording = recordings.last
+
     def summary = model_name.human
 
     def revisable_attributes = attributes.except("id", "created_at")

@@ -1,8 +1,6 @@
 class Recording < ApplicationRecord
   records :recordable, types: Recordable::TYPES, inverse_of: :recordings
 
-  enum :status, { active: 0, archived: 1, trashed: 2 }
-
 <% if buckets? -%>
   belongs_to :bucket
 <% end -%>
