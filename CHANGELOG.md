@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `nested_recordable_attributes_for` accepts `recording_attributes:`, an optional proc
+  called once per new child (with the parent record) to build extra attributes for that
+  child's Recording. Without it, `apply_#{plural}_attributes!` creating a new child had
+  no way to set anything beyond `actor:` and the child's own fields — any host app whose
+  Recording has its own required columns (an `account_id` or similar tenant column is
+  the common case) hit a hard `NOT NULL` failure the moment a form actually submitted a
+  new child row.
+
+## [0.2.0]
+
+### Added
+
 - `trashable` — `default_scope` + `with_trashed` for a recordable type whose Recording
   can be trashed, so a trashed row stops showing up in normal queries. Paired with
   `Recording.active` and `Recording#trash!`.
