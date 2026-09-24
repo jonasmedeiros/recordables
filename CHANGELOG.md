@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.2]
 
 ### Removed
 
@@ -48,11 +48,13 @@ All notable changes to this project are documented here. The format follows
 - The `recordables:backfill` generator no longer needs (or generates) `.with_trashed` —
   that trap only existed because of `trashable`'s `default_scope`, which is gone.
 
-Existing apps using `trashable`/`trash!` need to migrate: replace `trash!` calls with
-`destroy!`, drop the `trashable` macro call, and add a migration to drop `recordings.status`
-(and add `events.actor_name`, make `events.recording_id`/`events.actor_id`/
-`recordings.creator_id` nullable with `ON DELETE SET NULL`, if adopting the new destroy/actor
-behavior). This is a breaking change — expect a `0.3.0`, not a patch release.
+**Breaking change**, despite the patch version number — pre-1.0 and the only consumer of this
+gem at the time of release is this repo's own author, so a 0.2.x bump was chosen deliberately
+over the stricter semver convention a minor bump would normally signal here. Existing apps
+using `trashable`/`trash!` need to migrate: replace `trash!` calls with `destroy!`, drop the
+`trashable` macro call, and add a migration to drop `recordings.status` (and add
+`events.actor_name`, make `events.recording_id`/`events.actor_id`/`recordings.creator_id`
+nullable with `ON DELETE SET NULL`, if adopting the new destroy/actor behavior).
 
 ## [0.2.0]
 
