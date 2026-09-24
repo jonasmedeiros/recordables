@@ -16,18 +16,18 @@ ActiveRecord::Schema.define do
 
   create_table :recordings, force: true do |t|
     t.references :bucket
-    t.references :parent
-    t.references :creator, null: false
+    t.references :parent, foreign_key: { to_table: :recordings }
+    t.references :creator, foreign_key: { to_table: :users, on_delete: :nullify }
     t.references :recordable, polymorphic: true, null: false, index: false
-    t.integer :status, null: false, default: 0
     t.integer :position
     t.timestamps
   end
 
   create_table :events, force: true do |t|
-    t.references :recording, null: false
+    t.references :recording, foreign_key: { on_delete: :nullify }
     t.references :recordable, polymorphic: true, null: false, index: false
-    t.references :actor, null: false
+    t.references :actor, foreign_key: { to_table: :users, on_delete: :nullify }
+    t.string :actor_name
     t.string :action, null: false
     t.json :details, null: false, default: {}
     t.datetime :created_at, null: false

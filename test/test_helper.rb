@@ -25,12 +25,7 @@ class RecordablesTest < Minitest::Test
   ].freeze
 
   def setup
-    # trashable's default_scope means Model.delete_all only clears rows
-    # with an active Recording — a row trashed in one test would otherwise
-    # survive into the next. with_trashed when it's defined (only Topic
-    # here) clears the table for real, matching what every other model's
-    # plain delete_all already does.
-    TABLES.each { |table| table.respond_to?(:with_trashed) ? table.with_trashed.delete_all : table.delete_all }
+    TABLES.each(&:delete_all)
     @actor = User.create!(name: "Jonas")
   end
 

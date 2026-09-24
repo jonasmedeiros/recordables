@@ -14,11 +14,24 @@ class InstallGeneratorTest < Rails::Generators::TestCase
     run_generator
 
     assert_file "app/models/recording.rb", /records :recordable, types: Recordable::TYPES/
-    assert_file "app/models/event.rb", /belongs_to :recording/
+    assert_file "app/models/event.rb", /belongs_to :recording, optional: true/
+    assert_file "app/models/event.rb", /belongs_to :actor, class_name: "User", optional: true/
+    assert_file "app/models/event.rb", /actor&\.name \|\| actor_name/
     assert_file "app/models/concerns/recordable.rb", /TYPES = %w\[\]/
     assert_file "app/models/bucket.rb", /delegated_type :bucketable/
     assert_file "app/models/concerns/bucketable.rb", /TYPES = %w\[\]/
-    assert_migration "db/migrate/create_recordables_tables.rb", /create_table :buckets/
+    assert_migration "db/migrate/create_recordables_tables.rb" do |migration|
+      assert_match(/create_table :buckets/, migration)
+      refute_match(/:status/, migration)
+      assert_match(/t\.string :actor_name/, migration)
+      assert_match(/on_delete: :nullify/, migration)
+    end
+  end
+
+  def test_actor_label_is_configurable
+    run_generator %w[--actor-label=display_name]
+
+    assert_file "app/models/event.rb", /actor&\.display_name \|\| actor_name/
   end
 
   def test_skipping_buckets_omits_them_everywhere
@@ -135,12 +148,11 @@ class BackfillGeneratorTest < Rails::Generators::TestCase
   destination File.expand_path("../tmp/generated", __dir__)
   setup :prepare_destination
 
-  def test_it_scaffolds_a_migration_using_with_trashed
+  def test_it_scaffolds_a_migration_that_creates_a_recording_for_every_row
     run_generator %w[RoutineTemplate]
 
     assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
-      assert_match(/RoutineTemplate\.with_trashed\.find_each/, migration)
-      refute_match(/RoutineTemplate\.find_each/, migration)
+      assert_match(/RoutineTemplate\.find_each/, migration)
       assert_match(/Recording\.record\(/, migration)
     end
   end
@@ -168,7 +180,7 @@ class BackfillGeneratorTest < Rails::Generators::TestCase
 
     assert_migration "db/migrate/backfill_routine_templates_recordings.rb" do |migration|
       assert_match(/def down/, migration)
-      assert_match(/Recording\.where\(recordable_type: "RoutineTemplate"\)\.with_trashed\.find_each/, migration)
+      assert_match(/Recording\.where\(recordable_type: "RoutineTemplate"\)\.find_each/, migration)
     end
   end
 

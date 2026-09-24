@@ -6,8 +6,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Removed
+
+- **`trashable`, `Recording#trash!`, `Recording.active`, `Recording#status`.** Soft-delete
+  never belonged in a versioning gem — it's a separate concern that got bundled in by
+  mistake. `Recording` no longer has a `status` column at all; a recordable type that wants
+  its own status (draft/published, say) should model it as a plain column on the recordable
+  itself, not on the Recording.
+
 ### Added
 
+- **`Recording#destroy!(actor:)`** — a real, hard delete. Removes the Recording and its
+  recordable row. Logs a final `"destroyed"` event first, against the recordable that's
+  about to disappear, so the log itself records what was removed and by whom. This is the
+  only removal path now; there is no more soft-delete state to fall back to.
+- **Events outlive their Recording.** Destroying a Recording nullifies `recording_id` on
+  its Events rather than cascading — the fact that something was created, edited, and later
+  destroyed stays part of the permanent log even once the content itself is gone. Needed
+  for real compliance/deletion flows (an account or organization being deleted for good),
+  where a soft-delete flag that keeps content sitting in the table forever isn't good enough.
+- **An event's actor survives the actor being deleted.** `actor_id` is nullified (not
+  cascaded) when the actor row is destroyed, and `actor_name` — a denormalized snapshot
+  taken when the event was logged — keeps the log legible afterward.
+  `event.actor_label` reads `actor&.<label> || actor_name`. The install generator now asks
+  `--actor-label` (default `name`) for which attribute to snapshot.
+- `recordable_belongs_to`, `Recording.creator`, and `Event.actor`/`Event.recording` are all
+  now optional at the association level, matching the nullify-on-delete behavior above.
 - `nested_recordable_attributes_for` accepts `recording_attributes:`, an optional proc
   called once per new child (with the parent record) to build extra attributes for that
   child's Recording. Without it, `apply_#{plural}_attributes!` creating a new child had
@@ -15,6 +39,20 @@ All notable changes to this project are documented here. The format follows
   Recording has its own required columns (an `account_id` or similar tenant column is
   the common case) hit a hard `NOT NULL` failure the moment a form actually submitted a
   new child row.
+
+### Changed
+
+- `has_children`'s children lookup no longer filters through `Recording.active` — with no
+  soft-delete state, a destroyed child is simply gone from the table, nothing to scope
+  around.
+- The `recordables:backfill` generator no longer needs (or generates) `.with_trashed` —
+  that trap only existed because of `trashable`'s `default_scope`, which is gone.
+
+Existing apps using `trashable`/`trash!` need to migrate: replace `trash!` calls with
+`destroy!`, drop the `trashable` macro call, and add a migration to drop `recordings.status`
+(and add `events.actor_name`, make `events.recording_id`/`events.actor_id`/
+`recordings.creator_id` nullable with `ON DELETE SET NULL`, if adopting the new destroy/actor
+behavior). This is a breaking change — expect a `0.3.0`, not a patch release.
 
 ## [0.2.0]
 

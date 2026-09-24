@@ -4,20 +4,11 @@ require "recordables/generator_helpers"
 
 module Recordables
   module Generators
-    # Scaffolds the migration for adopting recordable/trashable on a table
-    # that already has rows: create the first Recording (and "created"
-    # Event) for each one.
+    # Scaffolds the migration for adopting recordable on a table that
+    # already has rows: create the first Recording (and "created" Event)
+    # for each one.
     #
     #   bin/rails generate recordables:backfill RoutineTemplate
-    #
-    # Exists because of one specific, easy-to-miss trap: once a model has
-    # trashable's default_scope, `Model.find_each` inside the very
-    # migration meant to create that model's first Recordings iterates
-    # zero rows — every row is invisible under a scope that hides anything
-    # without an active Recording yet, which at backfill time is all of
-    # them. The fix (`Model.with_trashed.find_each`) is one word, but
-    # silent when missing: the migration "succeeds" in milliseconds having
-    # touched nothing, and nothing about that looks wrong until much later.
     class BackfillGenerator < Rails::Generators::NamedBase
       include ActiveRecord::Generators::Migration
       include Recordables::GeneratorHelpers

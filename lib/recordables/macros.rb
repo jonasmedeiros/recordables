@@ -23,20 +23,8 @@ module Recordables
       include Recordables::Recordable
     end
 
-    # Adds default_scope + with_trashed to a recordable type, so a trashed
-    # Recording's row stops showing up in normal queries. See
-    # Recordables::Trashable for the mechanics.
-    #
-    #   class RoutineTemplate < ApplicationRecord
-    #     recordable
-    #     trashable
-    #   end
-    def trashable
-      include Recordables::Trashable
-    end
-
     # Raises if anything tries to write directly to a persisted recordable
-    # row instead of going through revise()/trash! on its Recording. See
+    # row instead of going through revise()/destroy! on its Recording. See
     # Recordables::Immutable for the mechanics.
     #
     #   class RoutineTemplate < ApplicationRecord
@@ -94,16 +82,17 @@ module Recordables
       __recordables_define_nested_attributes(plural_name, class_name: target_class_name, recording_attributes: recording_attributes)
     end
 
-    # A belongs_to whose target is trashable, resolved through the append-only
+    # A belongs_to whose target is recordable, resolved through the append-only
     # Event log instead of the raw foreign key.
     #
     # Rails' belongs_to association reader builds its own `WHERE id = ...`
-    # query directly against the target class — bypassing trashable's
-    # default_scope entirely, since that scope is added to the class's own
-    # query interface, not baked into every possible query Rails might build
-    # against it. A plain belongs_to therefore silently returns the stale,
-    # trashed-or-superseded row instead of nil once the target's been revised
-    # or trashed — exactly the case this exists to handle.
+    # query directly against the target class — but revise() repoints a
+    # Recording at a brand new row id, so a plain belongs_to holding the id
+    # from whenever it was assigned silently returns the stale, superseded
+    # row (or nil, if that row's since been destroyed) instead of the
+    # current one. Never store or compare a recording_id directly for this
+    # reason — always resolve through the recordable's own stable id, the
+    # way this does.
     #
     # An Event's recordable_id is set once, at the moment that event
     # happened, and never rewritten — so the "created" event for a given
@@ -111,7 +100,7 @@ module Recordables
     # been revised since. That event's Recording is the stable pointer for
     # the whole lineage, so walking through it reaches whatever version is
     # current right now: the original row if it still is, or the latest
-    # revision if the original has since been revised or trashed.
+    # revision if the original has since been revised.
     #
     #   class Routine < ApplicationRecord
     #     recordable_belongs_to :routine_template

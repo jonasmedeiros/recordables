@@ -119,4 +119,55 @@ class RecordingTest < RecordablesTest
     assert_predicate Recording.posts.first, :post?
     refute_predicate Recording.posts.first, :note?
   end
+
+  def test_destroy_bang_removes_the_recording_and_its_recordable
+    recording = Recording.record(Post.new(title: "v1"), actor: actor)
+    post_id = recording.recordable_id
+
+    recording.destroy!(actor: actor)
+
+    refute Recording.exists?(recording.id)
+    refute Post.exists?(post_id)
+  end
+
+  def test_destroy_bang_leaves_every_prior_event_in_place
+    recording = Recording.record(Post.new(title: "v1"), actor: actor)
+    recording.revise(actor: actor, title: "v2")
+    event_ids = recording.events.pluck(:id)
+
+    recording.destroy!(actor: actor)
+
+    assert_equal event_ids.sort, Event.where(id: event_ids).pluck(:id).sort
+  end
+
+  def test_destroy_bang_nullifies_recording_id_on_its_events_instead_of_deleting_them
+    recording = Recording.record(Post.new(title: "v1"), actor: actor)
+    event_ids = recording.events.pluck(:id)
+
+    recording.destroy!(actor: actor)
+
+    assert_equal [nil], Event.where(id: event_ids).distinct.pluck(:recording_id)
+  end
+
+  def test_destroy_bang_logs_a_destroyed_event_naming_the_actor
+    recording = Recording.record(Post.new(title: "v1"), actor: actor)
+
+    recording.destroy!(actor: actor)
+
+    destroyed_event = Event.where(recordable_type: "Post").order(:created_at).last
+    assert_equal "destroyed", destroyed_event.action
+    assert_equal actor, destroyed_event.actor
+  end
+
+  def test_an_events_actor_name_survives_the_actor_being_deleted
+    deletable_actor = User.create!(name: "Temp Person")
+    recording = Recording.record(Post.new(title: "v1"), actor: deletable_actor)
+    event = recording.events.first
+
+    deletable_actor.destroy!
+
+    assert_nil event.reload.actor
+    assert_equal "Temp Person", event.actor_name
+    assert_equal "Temp Person", event.actor_label
+  end
 end

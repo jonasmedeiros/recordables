@@ -8,7 +8,6 @@ module Recordables
   #
   #   class RoutineTemplate < ApplicationRecord
   #     recordable
-  #     trashable
   #     repoint_on_revise :routine_template_people, :goal_routine_templates
   #   end
   #

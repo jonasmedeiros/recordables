@@ -17,9 +17,8 @@ class RecordableBelongsToTest < RecordablesTest
     revised = recording.revise(actor: actor, title: "Second")
 
     # Regression: a plain `belongs_to :topic` would return the original,
-    # now-trashed-by-default_scope row here (Rails builds `WHERE id = ...`
-    # directly, bypassing trashable's default_scope) instead of the current
-    # version.
+    # now-superseded row here (Rails builds `WHERE id = ...` directly
+    # against whatever id was assigned) instead of the current version.
     assert_equal revised.id, tag.topic.id
     assert_equal "Second", tag.topic.title
   end

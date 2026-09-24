@@ -14,9 +14,8 @@ class CreateRecordablesTables < ActiveRecord::Migration<%= migration_version %>
       t.references :bucket, null: false, foreign_key: true
 <% end -%>
       t.references :parent, foreign_key: { to_table: :recordings }
-      t.references :creator, null: false, foreign_key: { to_table: :<%= actor_table %> }
+      t.references :creator, foreign_key: { to_table: :<%= actor_table %>, on_delete: :nullify }
       t.references :recordable, polymorphic: true, null: false, index: false
-      t.integer :status, null: false, default: 0
       t.integer :position
       t.timestamps
 
@@ -28,9 +27,10 @@ class CreateRecordablesTables < ActiveRecord::Migration<%= migration_version %>
     end
 
     create_table :events do |t|
-      t.references :recording, null: false, foreign_key: true
+      t.references :recording, foreign_key: { on_delete: :nullify }
       t.references :recordable, polymorphic: true, null: false, index: false
-      t.references :actor, null: false, foreign_key: { to_table: :<%= actor_table %> }
+      t.references :actor, foreign_key: { to_table: :<%= actor_table %>, on_delete: :nullify }
+      t.string :actor_name
       t.string :action, null: false
       t.json :details, null: false, default: {}
       t.datetime :created_at, null: false
