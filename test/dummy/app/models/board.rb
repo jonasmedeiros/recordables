@@ -1,6 +1,5 @@
 class Board < ActiveRecord::Base
   recordable
-  trashable
   repoint_on_revise :cards
 
   has_many :cards

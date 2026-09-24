@@ -13,6 +13,8 @@ module Recordables
 
       class_option :actor, type: :string, default: "User",
                            desc: "Model that creates recordings and appears on events"
+      class_option :actor_label, type: :string, default: "name",
+                           desc: "Attribute on the actor to snapshot onto events, e.g. name or display_name"
       class_option :buckets, type: :boolean, default: true,
                             desc: "Generate Bucket, the container that owns recordings"
 
@@ -51,6 +53,8 @@ module Recordables
         def actor_class = options[:actor].camelize
 
         def actor_table = actor_class.tableize
+
+        def actor_label = options[:actor_label]
 
         def migration_version = "[#{Rails::VERSION::MAJOR}.#{Rails::VERSION::MINOR}]"
     end

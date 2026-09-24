@@ -24,7 +24,7 @@ module Recordables
   # needs its own Recording the moment it's created, which a plain
   # attribute assignment can't set up. This does the same job (a form
   # posts an array of {id:, ...fields, _destroy:} hashes; existing rows
-  # get updated or trashed, new ones get created) through revise()/trash!
+  # get updated or destroyed, new ones get created) through revise()/destroy!
   # instead of a raw write.
   #
   # Two-phase, same as accepts_nested_attributes_for from the caller's
@@ -91,7 +91,7 @@ module Recordables
 
             if id && (child = current_by_id[id.to_s])
               if destroy
-                child.recording.trash!(actor: actor)
+                child.recording.destroy!(actor: actor)
               else
                 child.recording.revise(actor: actor, **changes)
               end

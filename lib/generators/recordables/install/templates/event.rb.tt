@@ -1,8 +1,15 @@
 class Event < ApplicationRecord
-  belongs_to :recording
+  belongs_to :recording, optional: true
   belongs_to :recordable, polymorphic: true
-  belongs_to :actor, class_name: "<%= actor_class %>"
+  belongs_to :actor, class_name: "<%= actor_class %>", optional: true
+
+  before_create { self.actor_name ||= actor&.<%= actor_label %> }
 
   scope :newest_first, -> { order(created_at: :desc, id: :desc) }
   scope :of_type, ->(type) { where(recordable_type: type) }
+
+  # actor_name is a denormalized snapshot of actor.<%= actor_label %>, taken
+  # when the event was created — it stays legible even after the actor row
+  # itself is deleted, when actor_id is nullified to nil.
+  def actor_label = actor&.<%= actor_label %> || actor_name
 end

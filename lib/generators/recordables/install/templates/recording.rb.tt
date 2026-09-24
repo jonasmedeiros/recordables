@@ -4,11 +4,11 @@ class Recording < ApplicationRecord
 <% if buckets? -%>
   belongs_to :bucket
 <% end -%>
-  belongs_to :creator, class_name: "<%= actor_class %>"
+  belongs_to :creator, class_name: "<%= actor_class %>", optional: true
   belongs_to :parent, class_name: "Recording", optional: true
 
   has_many :children, class_name: "Recording", foreign_key: :parent_id, dependent: :destroy
-  has_many :events, dependent: :destroy
+  has_many :events, dependent: :nullify
 
   delegate :commentable?, :publishable?, :nestable?, :summary, to: :recordable
 

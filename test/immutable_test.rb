@@ -71,11 +71,12 @@ class ImmutableTest < RecordablesTest
     assert_equal "Second", revision.title
   end
 
-  def test_trash_is_not_blocked_since_it_writes_to_the_recording_not_the_row
+  def test_destroy_bang_on_the_recording_is_not_blocked_despite_the_guard_on_the_row
     recording = Recording.record(Topic.new(title: "First"), actor: actor)
+    topic_id = recording.recordable.id
 
-    recording.trash!(actor: actor)
+    recording.destroy!(actor: actor)
 
-    assert_predicate recording.reload, :trashed?
+    refute Topic.exists?(topic_id)
   end
 end

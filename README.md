@@ -21,11 +21,37 @@ recording  ──points at──▶  recordable     the content (Article, Note, 
                                           current when it happened
 ```
 
-- **`recordings`** — the spine. Foreign keys, status, position. No text columns, so it stays
-  cheap to index and paginate however large it grows.
+- **`recordings`** — the spine. Foreign keys and position only. No text columns, no status —
+  it stays cheap to index and paginate however large it grows, and never becomes a state
+  machine (see "What recordable is for" below).
 - **recordables** — the content. Immutable: an edit inserts a row, so none of them carry
   `updated_at`.
 - **`events`** — append-only, and the reason history and the activity feed are the same data.
+  Survives its Recording being destroyed — see "Destroying a recordable" below.
+
+## What recordable is for
+
+**Adopt it for content people draft and revise** — an article, a comment, a template someone
+edits over time and might want to compare or restore an earlier version of. That's genuinely
+what this gem is for, and the whole point of the three tables above.
+
+**Don't adopt it for workflow state.** A `Task` moving `initial → in_progress → completed`, an
+order moving `pending → shipped`, isn't content with a history worth version-browsing — it's a
+state machine, and a plain `status` enum column with an ordinary `update!` is the right tool.
+Modeling a status transition as `revise()` (a whole new row, a new id, every associated record
+needing to be repointed) buys none of what versioning is for and costs real complexity: every
+existing reference to the row goes stale the instant the status changes, `#reload` silently
+starts returning the pre-transition version (see Testing, below), and every join or `belongs_to`
+pointed at it needs its own repoint story.
+
+If a type doesn't need "what did this used to say" or "restore an earlier draft," it almost
+certainly doesn't need `recordable` — just a column.
+
+**Status belongs on the recordable, never on the Recording.** If a recordable type genuinely
+does need a status (a document that's `draft`/`published`, say), that's a plain column on the
+recordable's own table, alongside its other content — not something this gem tracks on
+`Recording` on the type's behalf. `Recording` only ever answers "what changed, when, and by
+whom" — it has no opinion on what any particular snapshot's content *means*.
 
 ## Getting started
 
@@ -113,37 +139,65 @@ than the snapshot, so revising content never touches them.
 | | Where it lives |
 |---|---|
 | Migrations, `Recording`, `Event`, `Bucket`, the concerns, each content type | **Generated into your app.** You own and edit these; the gem never touches them again |
-| `records` / `recordable` macros, `revise`, `revert_to`, `versions`, `recordable_at`, `copy_content_to` and its guard | **Kept in the gem** |
-| `trashable`, `recordable_belongs_to`, `immutable`, `has_children`, `repoint_on_revise`, `nested_recordable_attributes_for`, `Recordables::Testing` | **Kept in the gem** — all opt-in, none of it changes behavior for a model that doesn't call it |
+| `records` / `recordable` macros, `revise`, `revert_to`, `destroy!`, `versions`, `recordable_at`, `copy_content_to` and its guard | **Kept in the gem** |
+| `recordable_belongs_to`, `immutable`, `has_children`, `repoint_on_revise`, `nested_recordable_attributes_for`, `Recordables::Testing` | **Kept in the gem** — all opt-in, none of it changes behavior for a model that doesn't call it |
+
+Soft-delete (a "trashed but still in the table" state) isn't something this gem provides —
+that's a separate concern from versioning, and conflating them was a mistake an earlier version
+of this gem made. If your app wants soft-delete, layer it on top of your own recordable
+type with your own scope; `recordable` won't fight you, and it won't manage that state for you
+either.
 
 The rule: **generate what's opinionated, keep what fails silently.** Permissions, controllers
 and tree semantics are deliberately yours — that is why the generated files are plain Rails
 you can rewrite freely.
 
-## Trashing, and the belongs_to trap
+## Destroying a recordable
 
-`recordable` alone doesn't give you soft-delete — a "trashed" Recording still leaves its
-row visible to every plain query, since `trash!` only changes the *Recording's* status,
-nothing about the row itself. `trashable` closes that gap:
+Deleting is a real, hard delete — not a status flip. `destroy!` on a Recording removes the
+Recording and its current recordable row:
 
 ```ruby
 class Article < ApplicationRecord
   recordable
-  trashable
 end
 
-article.recording.trash!(actor: current_user)
+article.recording.destroy!(actor: current_user)
 
-Article.count            # doesn't see it
-Article.with_trashed.count  # does
+Article.exists?(article.id)  # false — really gone
 ```
 
-The one thing this doesn't fix by itself is `belongs_to`. Rails' association reader builds
-its own `WHERE id = ...` directly against the target class, bypassing `trashable`'s
-`default_scope` entirely — so a plain `belongs_to :article` on some other model silently
-returns the stale, trashed-or-superseded row instead of nil or the current version. This is
-the sharpest edge in the whole pattern, and it fails silently: nothing raises, the wrong data
-just quietly comes back. `recordable_belongs_to` is the fix:
+What survives is the log: every `Event` this recordable ever produced (`created`, `updated`,
+`reverted`) stays in place, including a final `destroyed` event this call logs before removing
+anything. An event's `recording_id` is nullified rather than cascaded when its Recording goes
+away — the fact that an article was created, edited twice, and later deleted is itself part of
+the record this gem exists to keep, even once the content is gone. This matters for compliance
+flows too: deleting an account or an organization needs an actual purge path, not a soft-delete
+flag that keeps the content sitting in the table forever waiting for a "real" cleanup that
+never has to happen.
+
+The same applies to *who* did something. An event's `actor` can be deleted independently of any
+recordable it acted on — a person leaves the account, say. `actor_id` is nullified rather than
+left dangling, but the event still needs to read sensibly afterward, so a name is snapshotted
+onto the event the moment it's created:
+
+```ruby
+event.actor            # nil, once the actor row is gone
+event.actor_name        # "Jonas" — captured when the event happened, survives regardless
+event.actor_label       # actor&.name || actor_name — whichever is available right now
+```
+
+`recordables:install` asks which attribute to snapshot (`--actor-label`, defaults to `name`) —
+point it at whatever your actor's display name method is, e.g. `--actor-label=display_name`.
+
+The other durability edge is `belongs_to`. Rails' association reader builds its own
+`WHERE id = ...` directly against the target class using whatever id was assigned — but
+`revise()` repoints a Recording at a brand new row the moment content changes, so a plain
+`belongs_to :article` holding an id from before that silently returns the stale, superseded row
+(or nil, if it's since been destroyed) instead of the current one. This is the sharpest edge in
+the whole pattern, and it fails silently: nothing raises, the wrong data just quietly comes
+back. Never hold onto or compare a `recording_id` directly for this reason — always resolve
+through the recordable's own stable id. `recordable_belongs_to` is the fix:
 
 ```ruby
 class Comment < ApplicationRecord
@@ -175,7 +229,8 @@ Article.update_all(title: "x")      # raises at the class level
 ```
 
 `record`/`revise` are unaffected — they only ever save a fresh, not-yet-persisted instance,
-never a second write against a row that's already there.
+never a second write against a row that's already there. `destroy!` on the Recording is also
+unaffected — it's the sanctioned way to remove an immutable recordable's row.
 
 ## Children: a real has_many, or a child Recording?
 
@@ -222,7 +277,7 @@ Recording), or does something external point at it (repoint_on_revise)?
 straight to association rows at `assign_attributes` time, but a new child needs its own
 Recording, which needs the parent to already be saved or revised. `nested_recordable_attributes_for`
 does the same job (a form posts an array of `{id:, ...fields, _destroy:}` hashes) through
-`revise()`/`trash!` instead of a raw write:
+`revise()`/`destroy!` instead of a raw write:
 
 ```ruby
 class Routine < ApplicationRecord
@@ -243,7 +298,7 @@ end
 Two-phase, matching how a controller/interactor already has to split "assign" from "save"
 here: `tasks_attributes=` stores the submitted rows without writing anything, then
 `apply_tasks_attributes!(actor:)` — called once the routine itself has a current Recording —
-creates, revises, or trashes each one.
+creates, revises, or destroys each one.
 
 ## Testing
 
@@ -275,10 +330,8 @@ assert_equal "complete", current_recordable(recording).status
 
 ## Adopting recordable on an existing table
 
-Once a model has `trashable`, its `default_scope` hides any row with no active
-Recording — which, the moment you first add `trashable`, is every existing row. The
-migration that's supposed to create each row's first Recording has to bypass that scope to
-see them at all:
+Scaffolds the migration that creates each existing row's first Recording (and its `created`
+Event), backfilled from the row's own `created_at`:
 
 ```bash
 bin/rails generate recordables:backfill RoutineTemplate
@@ -286,14 +339,10 @@ bin/rails generate recordables:backfill RoutineTemplate
 
 ```ruby
 # generated: db/migrate/..._backfill_routine_templates_recordings.rb
-RoutineTemplate.with_trashed.find_each do |routine_template|
+RoutineTemplate.find_each do |routine_template|
   Recording.record(routine_template, actor: routine_template.actor, created_at: routine_template.created_at)
 end
 ```
-
-Miss `.with_trashed` here — plain `find_each` — and the migration doesn't error. It "succeeds"
-in milliseconds, having created zero Recordings, and nothing about that looks wrong until
-something downstream (a query, a destroy cascade) turns up rows with no history at all.
 
 ## Caveats
 
@@ -304,12 +353,10 @@ something downstream (a query, a destroy cascade) turns up rows with no history 
 - `events.details` is a `json` column. Ruby 4 ships json 3.x, whose `JSON.parse` moved to
   keyword arguments while ActiveSupport 8.1 still calls it positionally. Pin
   `gem "json", "~> 2.7"` until that is fixed upstream.
-- On a `trashable` type, `Model.delete_all` / `Model.destroy_all` raise rather than run.
-  Under `default_scope` they'd only ever touch rows with an active Recording — anything
-  already trashed survives, silently — which is exactly backwards from what a test
-  teardown's `delete_all` or a `DatabaseCleaner` truncation strategy expects. Call
-  `Model.with_trashed.delete_all` if you mean it, or scope down first
-  (`Model.where(...).delete_all`) if you meant only some of the active rows.
+- `Model.delete_all` on a recordable type bypasses `destroy!`, so the Events it would have
+  logged never happen and any content-only associations it owns (rich text, attachments) can
+  be left behind. Prefer looping `recording.destroy!(actor:)` per row, or `destroy_all` if the
+  type has no other before_destroy concerns to skip.
 
 ## Development
 
@@ -319,7 +366,7 @@ bundle exec rake test
 ```
 
 The suite boots a small Rails application in `test/dummy`, so Action Text, Active Storage
-and the generators are exercised for real rather than stubbed. 41 tests cover the snapshot
+and the generators are exercised for real rather than stubbed. The suite covers the snapshot
 lifecycle, rich text and attachment copy-forward, blob sharing, the uncopyable-association
 guard, and all three generators.
 

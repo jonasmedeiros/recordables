@@ -5,12 +5,7 @@ class Backfill<%= class_name.pluralize %>Recordings < ActiveRecord::Migration<%=
     say_with_time "Creating a Recording for every existing <%= file_name %>" do
       count = 0
 
-      # trashable's default_scope hides any row with no active Recording —
-      # exactly every row this backfill is about to create the first one
-      # for. Without with_trashed this silently iterates zero rows: the
-      # migration "succeeds" in milliseconds having touched nothing, which
-      # is easy to miss since nothing about it raises or looks wrong.
-      <%= class_name %>.with_trashed.find_each do |<%= file_name %>|
+      <%= class_name %>.find_each do |<%= file_name %>|
         Recording.record(
           <%= file_name %>,
           actor: <%= file_name %>.<%= creator_expression %>,
@@ -27,7 +22,7 @@ class Backfill<%= class_name.pluralize %>Recordings < ActiveRecord::Migration<%=
   end
 
   def down
-    Recording.where(recordable_type: "<%= class_name %>").with_trashed.find_each do |recording|
+    Recording.where(recordable_type: "<%= class_name %>").find_each do |recording|
       recording.events.delete_all
       recording.delete
     end

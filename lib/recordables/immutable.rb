@@ -6,7 +6,7 @@ module Recordables
   class ImmutableRecordable < StandardError; end
 
   # Opt-in alongside `recordable` for a type that should never be updated
-  # in place after it's first saved — only revise() (a new row) or trash!
+  # in place after it's first saved — only revise() (a new row) or destroy!
   # (on its Recording) should ever change what a caller sees.
   #
   #   class RoutineTemplate < ApplicationRecord
@@ -31,7 +31,7 @@ module Recordables
 
     included do
       before_update { raise_immutable!(:update) }
-      before_destroy { raise_immutable!(:destroy) }
+      before_destroy { raise_immutable!(:destroy) unless Recordables::Recording.destroying_recordable? }
     end
 
     # update_column/update_columns/delete bypass callbacks entirely (that's
@@ -57,7 +57,7 @@ module Recordables
       def raise_immutable!(verb)
         raise Recordables::ImmutableRecordable, <<~MESSAGE.squish
           #{self.class.name}##{verb} was called directly on a persisted
-          recordable — #{verb == :destroy ? "trash! its Recording" : "call revise(actor:, **changes) on its Recording"}
+          recordable — #{verb == :destroy ? "destroy! its Recording" : "call revise(actor:, **changes) on its Recording"}
           instead, so the change goes through the versioning this gem
           exists to provide.
         MESSAGE

@@ -6,13 +6,14 @@ module Recordables
 
     VERSION_ACTIONS = %w[created updated reverted].freeze
 
-    included do
-      # The install generator's migration creates the status column
-      # (integer, default 0, not null) but doesn't declare the enum itself
-      # — active/trash! need this exact mapping to exist, so it lives here
-      # rather than being left for every consumer to redeclare correctly.
-      enum :status, { active: 0, archived: 1, trashed: 2 }
-    end
+    # Set only around #destroy!'s own recordable.destroy! call below, so
+    # Immutable's before_destroy guard can tell "the gem's own sanctioned
+    # destroy path" apart from a caller destroying a recordable directly —
+    # the same distinction record/revise draw by only ever calling
+    # .new(...).save! and never touching an existing row's update!. Module
+    # level (not per-host-Recording-class) since Immutable is mixed into
+    # the recordable, which has no reference to the Recording class itself.
+    def self.destroying_recordable? = Thread.current[:recordables_destroying_recordable] || false
 
     class_methods do
       def record(recordable, actor:, parent: nil, **attributes)
@@ -23,12 +24,6 @@ module Recordables
           recording
         end
       end
-
-      # Every other scope on this table should build on this one rather than
-      # querying status directly — trashable's default_scope depends on
-      # filtering through exactly this relation so a model swap here (e.g.
-      # adding a soft-delete concern upstream) only has one place to change.
-      def active = where(status: :active)
     end
 
     def revise(actor:, **changes)
@@ -59,14 +54,23 @@ module Recordables
       events.create!(recordable: snapshot, actor: actor, action: action, details: details)
     end
 
-    # "Deleting" a recordable never removes a row — it marks this pointer
-    # trashed and logs the transition, the same way revise/revert_to never
-    # delete either. A trashed Recording keeps recordable/versions/events
-    # working exactly as before; only .active-scoped lookups stop seeing it.
-    def trash!(actor: nil)
+    # A real delete: removes this Recording and its recordable row. Events
+    # are never touched here — recording_id is nullified (see the install
+    # migration's foreign_key on_delete: :nullify), not cascaded, so the
+    # log this recordable ever happened stays intact after the content
+    # itself is gone. Logs a final "destroyed" event first, against the
+    # recordable that's about to disappear, so the log itself says what was
+    # removed and by whom.
+    def destroy!(actor: nil)
       transaction do
-        update!(status: :trashed)
-        log!("trashed", recordable, actor: actor)
+        log!("destroyed", recordable, actor: actor)
+        begin
+          Thread.current[:recordables_destroying_recordable] = true
+          recordable.destroy!
+        ensure
+          Thread.current[:recordables_destroying_recordable] = false
+        end
+        super()
       end
     end
   end

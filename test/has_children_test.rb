@@ -35,11 +35,11 @@ class HasChildrenTest < RecordablesTest
     assert_equal 2, playlist.tracks.count
   end
 
-  def test_a_trashed_track_no_longer_appears_among_tracks
+  def test_a_destroyed_track_no_longer_appears_among_tracks
     playlist = Recording.record(Playlist.new(title: "Roadtrip"), actor: actor).recordable
     track_recording = playlist.add_track(actor: actor, title: "Song One")
 
-    track_recording.trash!(actor: actor)
+    track_recording.destroy!(actor: actor)
 
     assert_equal [], playlist.tracks.to_a
   end

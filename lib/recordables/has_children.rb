@@ -45,7 +45,7 @@ module Recordables
           target = target_class_name.constantize
           return target.none unless recording
 
-          target.joins(:recordings).merge(::Recording.active.where(parent_id: recording.id))
+          target.joins(:recordings).merge(::Recording.where(parent_id: recording.id))
                 .order("recordings.position")
         end
 
